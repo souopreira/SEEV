@@ -40,7 +40,8 @@ void Task1(void *pvParameters); // Atualizacao do grafico
 void Task3(void *pvParameters); // Logica principal do sistema
 void Task4(void *pvParameters); // Controle do servo
 void Task5(void *pvParameters); // Leitura do potenciometro
-
+void TemporaryTask(void *pvParameters);
+static bool tempTaskCreated = false;
 // Variáveis e fila para comunicação entre tarefas
 QueueHandle_t queue;
 SemaphoreHandle_t xDisplaySemaphore;
@@ -83,9 +84,27 @@ void setup() {
   tft.drawRect(6, 6, 228, 88, ILI9341_RED);
   tft.drawRect(3, 105, 232, 40, ILI9341_WHITE);
 
-
+  //organização dos indicadores de farois
   tft.drawCircle(30, 175, 26, ILI9341_BLUE);
   tft.drawCircle(85, 175, 26, ILI9341_GREEN);
+
+  //Setup de motores
+  servo1.write(100);
+  servo2.write(100);
+  delay(1000);
+  servo1.write(60);
+  servo2.write(130);
+  delay(1000);
+  servo1.write(130);
+  servo2.write(60);
+  delay(1000);
+  servo1.write(100);
+  servo2.write(100);
+  servo3.write(90);
+  servo4.write(30);
+  delay(1000);
+  servo3.write(60);
+  servo4.write(60);
 
   // Criacao da fila e tarefas
   queue = xQueueCreate(10, sizeof(int));
@@ -156,63 +175,88 @@ void Task3(void *pvParameters) {
       // Determinacao do estado baseado nos sensores e switches
       switch (state) {
         case 1:
+        	tempTaskCreated = false;
         	tft.fillCircle(85, 175, 25, ILI9341_BLACK);
           tft.fillCircle(30, 175, 25, ILI9341_BLUE);
           digitalWrite(LIGHT_PIN_1, 1);
           digitalWrite(LIGHT_PIN_2, 0);
-          servo3.write(35);
-          servo4.write(35);
+          digitalWrite(LIGHT_PIN_3, 1);
+          digitalWrite(LIGHT_PIN_4, 0);
+          servo3.write(30);
+          servo4.write(30);
           Serial.print("\nSYSTEM ON");
           break;
         case 2:
-
+        	tempTaskCreated = false;
           tft.fillCircle(30, 175, 25, ILI9341_BLUE);
+          tft.fillCircle(85, 175, 25, ILI9341_BLACK);
           tft.drawChar(220, 165, 'A', ILI9341_WHITE, ILI9341_BLACK, 3);
           digitalWrite(LIGHT_PIN_1, 1);
-          digitalWrite(LIGHT_PIN_2, 0);
-          servo3.write(35);
-          servo4.write(35);
+                    digitalWrite(LIGHT_PIN_2, 0);
+                    digitalWrite(LIGHT_PIN_3, 1);
+                    digitalWrite(LIGHT_PIN_4, 0);
+          servo3.write(30);
+          servo4.write(30);
           Serial.print("\nSYSTEM AUTO ON");
           break;
         case 3:
-
+        	tempTaskCreated = false;
           tft.fillCircle(30, 175, 25, ILI9341_BLACK);
           tft.fillCircle(85, 175, 25, ILI9341_BLACK);
           tft.drawChar(220, 165, 'A', ILI9341_WHITE, ILI9341_BLACK, 3);
           Serial.print("\nSYSTEM AUTO OFF");
           digitalWrite(LIGHT_PIN_1, 0);
           digitalWrite(LIGHT_PIN_2, 0);
-          servo3.write(35);
-          servo4.write(35);
+          digitalWrite(LIGHT_PIN_3, 0);
+          digitalWrite(LIGHT_PIN_4, 0);
+          servo3.write(60);
+          servo4.write(60);
           break;
         case 4:
-
+        	tempTaskCreated = false;
           tft.fillCircle(85, 175, 25, ILI9341_GREEN);
+          tft.fillCircle(30, 175, 25, ILI9341_BLACK);
           tft.drawChar(220, 165, 'A', ILI9341_WHITE, ILI9341_BLACK, 3);
           Serial.print("\nSYSTEM AUTO MED");
           digitalWrite(LIGHT_PIN_1, 0);
           digitalWrite(LIGHT_PIN_2, 1);
-          servo3.write(75);
-          servo4.write(75);
+          digitalWrite(LIGHT_PIN_3, 0);
+          digitalWrite(LIGHT_PIN_4, 1);
+          servo3.write(60);
+          servo4.write(60);
           break;
         case 5:
+        	tempTaskCreated = false;
         	tft.fillCircle(30, 175, 25, ILI9341_BLACK);
           tft.fillCircle(85, 175, 25, ILI9341_GREEN);
           Serial.print("\nSYSTEM MED");
           digitalWrite(LIGHT_PIN_1, 0);
           digitalWrite(LIGHT_PIN_2, 1);
-          servo3.write(75);
-          servo4.write(75);
+          digitalWrite(LIGHT_PIN_3, 0);
+          digitalWrite(LIGHT_PIN_4, 1);
+          servo3.write(60);
+          servo4.write(60);
           break;
         default:
         	tft.fillCircle(30, 175, 25, ILI9341_BLACK);
         	tft.fillCircle(85, 175, 25, ILI9341_BLACK);
         	tft.drawChar(220, 165, 'A', ILI9341_BLACK, ILI9341_BLACK, 3);
-          servo3.write(35);
-          servo4.write(35);
+          servo3.write(60);
+          servo4.write(60);
           digitalWrite(LIGHT_PIN_1, 0);
           digitalWrite(LIGHT_PIN_2, 0);
+          digitalWrite(LIGHT_PIN_3, 0);
+          digitalWrite(LIGHT_PIN_4, 0);
           Serial.print("\nSYSTEM OFF");
+
+            if (!tempTaskCreated) {
+              BaseType_t result = xTaskCreate(TemporaryTask, "TempTask", 2048, NULL, 1, NULL);
+              if (result == pdPASS) {
+                tempTaskCreated = true;
+              } else {
+                Serial.println("Erro: Não foi possível criar a tarefa temporária.");
+              }
+            }
           break;
       }
       xSemaphoreGive(xDisplaySemaphore);
@@ -226,7 +270,7 @@ void Task3(void *pvParameters) {
       state = 0;
     }
 
-    Serial.println(ldrValue);
+    Serial.println(ldrValue2);
     vTaskDelay(pdMS_TO_TICKS(100));
   }
 }
@@ -236,9 +280,13 @@ void Task4(void *pvParameters) {
   for (;;) {
     int angleValue = 0;
     if (xQueueReceive(queue, &angleValue, portMAX_DELAY) == pdPASS) {
-      int servoAngle = map(angleValue, -115, 115, 0, 180);
-      servo1.write(servoAngle);
-      servo2.write(servoAngle);
+      int leftAngle = map(angleValue, -115, 115, 130, 45);
+      int rightAngle = map(angleValue, -115, 115, 130, 45);
+      servo1.write(leftAngle);
+      servo2.write(rightAngle);
+
+
+
     }
     vTaskDelay(pdMS_TO_TICKS(100));
   }
@@ -256,4 +304,19 @@ void Task5(void *pvParameters) {
     }
     vTaskDelay(pdMS_TO_TICKS(100));
   }
+}
+
+
+void TemporaryTask(void *pvParameters) {
+ 
+  for (int i = 0; i < 2; i++) {
+    digitalWrite(LIGHT_PIN_4, HIGH);
+    digitalWrite(LIGHT_PIN_2, LOW);
+    vTaskDelay(pdMS_TO_TICKS(500));
+    digitalWrite(LIGHT_PIN_4, LOW);
+    digitalWrite(LIGHT_PIN_2, HIGH);
+    vTaskDelay(pdMS_TO_TICKS(500));
+  }
+  
+  vTaskDelete(NULL); // Apaga a própria tarefa
 }
